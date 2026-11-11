@@ -6,26 +6,6 @@ format: html
 editor: visual
 ---
 
-### Understanding the data
-
-- Advises legislature on health insurance coverage
-- Collected by US Census Bureau
-- ACS (American Community Survey) 1-Year Estimates Public Use Microdata Sample.
-  - set of anonymized, individual-level and housing-unit-level response records from the U.S. Census Bureau's annual survey
-  - Instead of pre-tabulated summary tables or percentages (like "the average income in City X is \$50,000"), PUMS provides raw, bottom-up records for individual people and households (with confidential personal identifiers removed)
-  - It aggregates data collected over a single calendar year and represents roughly 1% of the U.S. population (about 1% of all U.S. households)
-  - covers the nation, regions, states, and large local areas with populations of 65,000 or more, including Public Use Microdata Areas (PUMAs)
-- Data collection
-  - Selects a random sample of addresses from the Master Address File (MAF) covering all 50 states, Washington D.C., and Puerto Rico (where it is called the Puerto Rico Community Survey)
-  - To create the PUMS file, the Census Bureau pulls a subsample containing approximately 1% of the total housing units and 1% of the group quarters population from the full pool of anonymized annual survey responses.
-- Purpose
-  - Provide communities, governments, and businesses with frequently updated demographic, social, economic, and housing characteristics to make informed decisions between decennial censuses
-- Measures
-  - AGEP (age), TEN (tenure), MAR (marital status), HICOV (health insurance coverage recode
-  - Tenure options: N/A (GQ/vacant), owned with mortgage/loan, owned free and clear, rented, occupied without rent payment
-    - Tenure only exists for regular households, so some people get N/A. Nobody in these places owns or rents their own unit, so tenure doesn’t apply. “Vacant” is in the label because the same code is used for empty housing units, which also have no tenure. GQ = group quarters. The Census Bureau uses this term for places where people live in a group setting that’s not a regular house or apartment.
-- Each row is one combination of the four variable
-
 ### Code
 
 ```{r, echo=TRUE}
@@ -56,159 +36,158 @@ df <- read_csv("census_data.csv", skip = 4, col_types = "ccn") |>
       "No" = "No health insurance coverage",
       "Yes" = "With health insurance coverage"),
     marital = fct_recode(marital,
-      "Never/under15" = "Never married or under 15 years old")
+      "Never" = "Never married or under 15 years old")
   )
 #head(df)
 ```
 
 ```{r, echo=TRUE}
-# COUNT OF AGE GROUPS
-ggplot(df, aes(x = age, weight = count)) +
+# FIGURE 1: COUNTS FOR EACH VARIABLE
+df |>
+  pivot_longer(c(age, tenure, marital, insurance),
+               names_to = "variable", values_to = "level") |>
+  ggplot(aes(x = level, weight = count)) +
   geom_bar(fill = NA, color = "black") +
+  facet_wrap(~ variable, scales = "free_x") +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
   scale_y_continuous(labels = scales::label_comma()) +
   theme_minimal(12) +
-  labs(caption = "Figure 1")
-
-# COUNT OF TENURE GROUPS
-ggplot(df, aes(x = tenure, weight = count)) +
-  geom_bar(fill = NA, color = "black") +
-  scale_x_discrete(labels = label_wrap(10)) +
-  scale_y_continuous(labels = scales::label_comma()) +
-  theme_minimal(12) +
-  labs(caption = "Figure 2")
-
-# COUNT OF MARRIAGE GROUPS
-ggplot(df, aes(x = marital, weight = count)) +
-  geom_bar(fill = NA, color = "black") +
-  scale_x_discrete(labels = label_wrap(10)) +
-  scale_y_continuous(labels = scales::label_comma()) +
-  theme_minimal(12) +
-  labs(caption = "Figure 2")
-
-# COUNT OF INSURANCE GROUPS
-ggplot(df, aes(x = insurance, weight = count)) +
-  geom_bar(fill = NA, color = "black") +
-  scale_x_discrete(labels = label_wrap(10)) +
-  scale_y_continuous(labels = scales::label_comma()) +
-  theme_minimal(12) +
-  labs(caption = "Figure 1")
+  labs(x = NULL, caption = "Figure 1")
 ```
 
 ```{r, echo=TRUE}
-# PERCENT UNINSURED BY AGE
-uninsured_by_age <- df |> 
-  group_by(age) |>
-  summarize(percent_uninsured = 100 * 
-              sum(count[insurance == "No"]) / 
-              sum(count)
-            )
+# FIGURE 2: PERCENT UNINSURED FOR EACH VARIABLE
+pct_uninsured <- function(data, ...) {
+  data |>
+    group_by(...) |>
+    summarise(
+      percent_uninsured = 100 * sum(count[insurance == "No"]) /
+        sum(count),
+      .groups = "drop"
+    )
+}
 
-ggplot(uninsured_by_age, aes(x = percent_uninsured, y = age)) +
+df |>
+  pivot_longer(c(age, tenure, marital),
+               names_to = "variable", values_to = "level") |>
+  pct_uninsured(variable, level) |>
+  ggplot(aes(x = percent_uninsured, y = reorder(level, percent_uninsured))) +
   geom_point() +
+  facet_grid(variable ~ ., scales = "free_y", space = "free_y") +
+  theme_minimal(12) +
+  labs(x = "% uninsured", y = NULL, caption = "Figure 2")
+```
+
+```{r, echo=TRUE}
+# FIGURE 3: AGE DISTRIBUTION WITHIN EACH TENURE GROUP (COUNTS)
+ggplot(df, aes(x = age, weight = count)) +
+  geom_bar(fill = NA, color = "black") +
+  facet_wrap(~ tenure, scales = "free_y") +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  scale_y_continuous(labels = scales::label_comma()) +
   theme_minimal(12) +
   labs(caption = "Figure 3")
 ```
 
 ```{r, echo=TRUE}
-# PERCENT UNINSURED BY TENURE
-uninsured_by_tenure <- df |> 
-  group_by(tenure) |>
-  summarize(percent_uninsured = 100 * 
-              sum(count[insurance == "No"]) / 
-              sum(count)
-            )
-
-  
-ggplot(uninsured_by_tenure, aes(x = percent_uninsured, y = reorder(tenure, percent_uninsured))) +
-  geom_point() +
-  scale_y_discrete(labels = label_wrap(15)) +
-  theme_minimal(12) +
-  labs(caption = "Figure 4")
-```
-
-```{r, echo=TRUE}
-# PERCENT UNINSURED BY MARITAL STATUS
-uninsured_by_marital <- df |> 
-  group_by(marital) |>
-  summarize(percent_uninsured = 100 * 
-              sum(count[insurance == "No"]) / 
-              sum(count)
-            )
-  
-ggplot(uninsured_by_marital, aes(x = percent_uninsured, y = reorder(marital, percent_uninsured))) +
-  geom_point() +
-  scale_y_discrete(labels = label_wrap(10)) +
-  theme_minimal(12) +
-  labs(caption = "Figure 5")
-```
-
-```{r, echo=TRUE}
-# UNINSURED AGE X TENURE BREAKDOWN
-uninsured <- df |>
-  filter(insurance == "No")
-
-ggplot(uninsured, aes(x = age, weight = count, fill = tenure)) +
+# FIGURE 4: COUNTS, AGE X TENURE, BY INSURANCE
+df |>
+  ggplot(aes(x = age, weight = count, fill = tenure)) +
   geom_bar(position = "dodge") +
+  facet_wrap(~ insurance, ncol = 1, scales = "free_y") +
   scale_y_continuous(labels = scales::label_comma()) +
-  scale_fill_discrete(labels = scales::label_wrap(20)) +  
+  scale_fill_viridis_d() +
   theme_minimal(12) +
-  labs(caption = "Figure 6")
-
-# with faceting to show insured groups too 
-ggplot(df, aes(x = age, weight = count, fill = tenure)) +
-  geom_bar() +
-  facet_wrap(~ insurance) +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  scale_y_continuous(labels = scales::label_comma()) +
-  scale_fill_discrete(labels = scales::label_wrap(20)) + 
-  theme_minimal(12) +
-  labs(caption = "Figure 6")
-
+  labs(y = "count", caption = "Figure 4")
 ```
 
 ```{r, echo=TRUE}
-# % UNINSURED AGE, BY TENURE
-uninsured_by_tenure_age <- df |>
-  group_by(tenure, age) |>
-  summarise(percent_uninsured = 100 *
-              sum(count[insurance == "No"]) / 
-              sum(count),
-              .groups = "drop"
-            )
-
-ggplot(uninsured_by_tenure_age, aes(x = percent_uninsured, y = age)) +
+# FIGURE 5: PERCENT UNINSURED BY AGE, WITHIN TENURE
+df |>
+  pct_uninsured(tenure, age) |>
+  ggplot(aes(x = percent_uninsured, y = age)) +
   geom_point() +
   facet_wrap(~ tenure) +
   theme_minimal(12) +
-  labs(caption = "Figure 7")
+  labs(x = "% uninsured", caption = "Figure 5")
 ```
 
 ```{r, echo=TRUE}
-# AGE X MARITAL HEATMAP
-uninsured_by_marriage_age <- df |>
-  group_by(marital, age) |>
-  summarise(percent_uninsured = 100 *
-              sum(count[insurance == "No"]) / 
-              sum(count),
-              .groups = "drop"
-            )
-
-ggplot(uninsured_by_marriage_age, aes(x = age, y = marital)) +
-  geom_tile(aes(fill = percent_uninsured)) +
+# FIGURE 6: AGE DISTRIBUTION WITHIN EACH MARITAL GROUP (COUNTS)
+ggplot(df, aes(x = age, weight = count)) +
+  geom_bar(fill = NA, color = "black") +
+  facet_wrap(~ marital, scales = "free_y") +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
-  scale_fill_viridis_c() + 
+  scale_y_continuous(labels = scales::label_comma()) +
   theme_minimal(12) +
-  labs(caption = "Figure 8")
+  labs(caption = "Figure 6")
 ```
 
 ```{r, echo=TRUE}
-# MOSAIC PLOT 
-mymat <- xtabs(count ~ age + marital + tenure + insurance, data = df)
-
-mosaic(~ tenure + age + insurance, data = mymat,
-       direction = c("v", "v", "h"),
-       highlighting = "insurance",
-       highlighting_fill = c("firebrick", "grey90"),
-       labeling = labeling_border(rot_labels = c(90, 0, 0, 0)),
-       sub = "Figure 9")
+# FIGURE 7: COUNTS, AGE X MARITAL, BY INSURANCE
+df |>
+  ggplot(aes(x = age, weight = count, fill = marital)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ insurance, ncol = 1, scales = "free_y") +
+  scale_y_continuous(labels = scales::label_comma()) +
+  scale_fill_viridis_d() +
+  theme_minimal(12) +
+  labs(y = "count", caption = "Figure 7")
 ```
+
+```{r, echo=TRUE}
+# FIGURE 8: PERCENT UNINSURED, AGE X TENURE
+df |>
+  pct_uninsured(tenure, age) |>
+  ggplot(aes(x = age, y = tenure, fill = percent_uninsured)) +
+  geom_tile() +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  scale_fill_viridis_c(option = "viridis") +
+  theme_minimal(12) +
+  labs(fill = "% uninsured", caption = "Figure 8")
+```
+
+```{r, echo=TRUE}
+# FIGURE 9: PERCENT UNINSURED, AGE X MARITAL
+df |>
+  pct_uninsured(marital, age) |>
+  ggplot(aes(x = age, y = marital, fill = percent_uninsured)) +
+  geom_tile() +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  scale_fill_viridis_c(option = "viridis") +
+  theme_minimal(12) +
+  labs(fill = "% uninsured", caption = "Figure 9")
+```
+
+```{r, echo=TRUE}
+# FIGURE 10: PERCENT UNINSURED, TENURE X MARITAL
+df |>
+  pct_uninsured(marital, tenure) |>
+  ggplot(aes(x = tenure, y = marital, fill = percent_uninsured)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "viridis") +
+  theme_minimal(12) +
+  labs(fill = "% uninsured", caption = "Figure 10")
+```
+
+### Understanding the data
+
+- Advises legislature on health insurance coverage
+- Collected by US Census Bureau
+- ACS (American Community Survey) 1-Year Estimates Public Use Microdata Sample.
+  - set of anonymized, individual-level and housing-unit-level response records from the U.S. Census Bureau's annual survey
+  - Instead of pre-tabulated summary tables or percentages (like "the average income in City X is \$50,000"), PUMS provides raw, bottom-up records for individual people and households (with confidential personal identifiers removed)
+  - It aggregates data collected over a single calendar year and represents roughly 1% of the U.S. population (about 1% of all U.S. households)
+  - Covers the nation, regions, states, and large local areas with populations of 65,000 or more, including Public Use Microdata Areas (PUMAs)
+- Data collection
+  - ects a random sample of addresses from the Master Address File (MAF) covering all 50 states, Washington D.C., and Puerto Rico (where it is called the Puerto Rico Community Survey)
+  - To create the PUMS file, the Census Bureau pulls a subsample containing approximately 1% of the total housing units and 1% of the group quarters population from the full pool of anonymized annual survey responses.
+  - Data is self-reported by one person in the household.
+- Purpose
+  - Provide communities, governments, and businesses with frequently updated demographic, social, economic, and housing characteristics to make informed decisions between decennial censuses
+- Measures
+  - AGEP (age), TEN (tenure), MAR (marital status), HICOV (health insurance coverage recode)
+  - Tenure options: N/A (GQ/vacant), owned with mortgage/loan, owned free and clear, rented, occupied without rent payment
+    - Tenure only exists for regular households, so some people get N/A. Nobody in these places owns or rents their own unit, so tenure doesn’t apply. “Vacant” is in the label because the same code is used for empty housing units, which also have no tenure. GQ = group quarters. The Census Bureau uses this term for places where people live in a group setting that’s not a regular house or apartment (e.g. dorms, nursing homes, prisons, barracks).
+- Each row is one combination of the four variable
+  - The Census Bureau surveyed about 1% of people and gave each respondent a weight (PWGTP) for how many people they represent. Each `count` is the sum of those weights. A count of 951,042 might rest on only a few thousand actual survey responses, and very small counts rest on very few.
